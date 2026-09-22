@@ -1,0 +1,19 @@
+{
+  "name": "decupagem",
+  "version": "0.1.0",
+  "description": "Decupagem rápida de fotos e vídeos (RAW/ARW, LOG) — revisar, aprovar, descartar, organizar",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "bash scripts/build-dist.sh"
+  },
+  "dependencies": {
+    "exiftool-vendored": "^28.6.0",
+    "trash": "^8.1.1"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "rcedit": "^5.0.2"
+  }
+}

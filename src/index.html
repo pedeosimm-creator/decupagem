@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>decupagem</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="blobs">
+    <div class="blob" style="width:420px;height:420px;background:#e08a2e;top:-140px;left:-100px"></div>
+    <div class="blob" style="width:360px;height:360px;background:#8c7355;bottom:-160px;right:-80px"></div>
+  </div>
+
+  <div id="titlebar">
+    <div id="drag-region"><span class="title">decupagem</span><span id="folder-label"></span></div>
+    <div id="win-controls">
+      <button class="win-btn" id="btn-min" title="Minimizar">&#8211;</button>
+      <button class="win-btn" id="btn-max" title="Maximizar">&#9633;</button>
+      <button class="win-btn" id="btn-close" title="Fechar">&#10005;</button>
+    </div>
+  </div>
+
+  <div id="content">
+
+    <div id="empty-state">
+      <p class="empty-title">Escolha a pasta do job pra começar a decupar</p>
+      <button id="btn-choose" class="primary-btn">Escolher pasta</button>
+    </div>
+
+    <div id="grid-view" hidden>
+      <div id="grid-top">
+        <div id="folder-path"></div>
+        <div id="chips">
+          <button class="chip active" data-filter="todos">Todos <span></span></button>
+          <button class="chip" data-filter="pendentes">Pendentes <span></span></button>
+          <button class="chip" data-filter="talvez">Talvez <span></span></button>
+          <button class="chip" data-filter="aprovados">Aprovados <span></span></button>
+          <button class="chip" data-filter="descarte">Descarte <span></span></button>
+        </div>
+        <button id="btn-trocar-pasta" class="ghost-btn">Trocar pasta</button>
+      </div>
+      <div id="grid"></div>
+    </div>
+
+    <div id="fullscreen-view" hidden>
+      <div id="fs-media-wrap">
+        <img id="fs-image" hidden>
+        <video id="fs-video" hidden controls></video>
+        <div id="fs-badge"></div>
+        <div id="fs-counter"></div>
+        <button id="fs-rec709" class="fs-toggle" hidden>Rec709 simulado: ON</button>
+        <button id="fs-close" class="fs-toggle" style="right:12px;left:auto">Fechar (Esc)</button>
+      </div>
+      <div id="fs-bar">
+        <button data-action="discard" class="fs-btn danger"><span class="ic">&#10005;</span>Excluir</button>
+        <button data-action="maybe" class="fs-btn"><span class="ic">?</span>Talvez</button>
+        <button data-action="approve" class="fs-btn accent"><span class="ic">&#10003;</span>Aprovar</button>
+        <button data-action="folder" class="fs-btn"><span class="ic">&#128193;</span>Pasta</button>
+        <button data-action="rename" class="fs-btn"><span class="ic">&#9998;</span>Renomear</button>
+      </div>
+
+      <div id="fs-rename-pop" class="fs-pop" hidden>
+        <input id="fs-rename-input" type="text" spellcheck="false">
+        <button id="fs-rename-ok" class="primary-btn small">Renomear</button>
+        <button id="fs-rename-cancel" class="ghost-btn small">Cancelar</button>
+      </div>
+
+      <div id="fs-folder-pop" class="fs-pop" hidden>
+        <div id="fs-folder-recent"></div>
+        <input id="fs-folder-input" type="text" placeholder="nome da nova pasta" spellcheck="false">
+        <button id="fs-folder-ok" class="primary-btn small">Mover</button>
+        <button id="fs-folder-cancel" class="ghost-btn small">Cancelar</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
