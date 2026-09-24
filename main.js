@@ -51,9 +51,13 @@ async function loadSessionLog(folderPath) {
   try {
     const raw = await fsp.readFile(sessionFileFor(folderPath), 'utf8');
     const parsed = JSON.parse(raw);
-    return { discarded: parsed.discarded || [], recentFolders: parsed.recentFolders || [] };
+    return {
+      discarded: parsed.discarded || [],
+      recentFolders: parsed.recentFolders || [],
+      customFolders: parsed.customFolders || [],
+    };
   } catch {
-    return { discarded: [], recentFolders: [] };
+    return { discarded: [], recentFolders: [], customFolders: [] };
   }
 }
 
@@ -70,6 +74,7 @@ async function appendDiscarded(folderPath, name) {
 async function rememberFolder(folderPath, name) {
   const log = await loadSessionLog(folderPath);
   log.recentFolders = [name, ...log.recentFolders.filter((f) => f !== name)].slice(0, 8);
+  if (!log.customFolders.includes(name)) log.customFolders.push(name);
   await saveSessionLog(folderPath, log);
   return log.recentFolders;
 }
@@ -132,11 +137,50 @@ async function listMediaFiles(dirPath) {
   return out;
 }
 
+const SKIP_DIRS = new Set(['node_modules', '$recycle.bin', 'system volume information']);
+
+// Cartão de câmera guarda tudo em subpastas (DCIM\100MSDCF\...), então o scan
+// desce nelas. Na raiz ignora Aprovado/Talvez (tratadas à parte) e as pastas
+// customizadas já usadas — senão o que foi organizado voltaria como pendente.
+async function listMediaFilesDeep(root, excludeTop, maxDepth = 6, maxFiles = 5000) {
+  const out = [];
+  async function walk(dir, depth) {
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (out.length >= maxFiles) return;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const lower = entry.name.toLowerCase();
+        if (depth >= maxDepth || entry.name.startsWith('.') || SKIP_DIRS.has(lower)) continue;
+        if (depth === 0 && excludeTop.has(lower)) continue;
+        await walk(full, depth + 1);
+        continue;
+      }
+      const ext = path.extname(entry.name).toLowerCase();
+      if (!MEDIA_EXTS.has(ext)) continue;
+      try {
+        const st = await fsp.stat(full);
+        out.push({ name: entry.name, path: full, ext, kind: kindFor(ext), size: st.size, mtimeMs: st.mtimeMs });
+      } catch {
+        // unreadable, skip
+      }
+    }
+  }
+  await walk(root, 0);
+  return out;
+}
+
 async function buildSessionItems(folderPath) {
-  const rootFiles = await listMediaFiles(folderPath);
+  const log = await loadSessionLog(folderPath);
+  const excludeTop = new Set(['aprovado', 'talvez', ...log.customFolders.map((f) => f.toLowerCase()), ...log.recentFolders.map((f) => f.toLowerCase())]);
+  const rootFiles = await listMediaFilesDeep(folderPath, excludeTop);
   const approvedFiles = await listMediaFiles(path.join(folderPath, 'Aprovado'));
   const maybeFiles = await listMediaFiles(path.join(folderPath, 'Talvez'));
-  const log = await loadSessionLog(folderPath);
 
   const items = [];
   for (const f of rootFiles) items.push({ ...f, status: 'pending', id: f.path });
