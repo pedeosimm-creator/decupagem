@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "exiftool-vendored": "^28.6.0",
+    "ffmpeg-static": "^5.2.0",
     "trash": "^8.1.1"
   },
   "devDependencies": {

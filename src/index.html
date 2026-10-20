@@ -2,80 +2,292 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>decupagem</title>
+<title>Decupagem</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-  <div id="blobs">
-    <div class="blob" style="width:420px;height:420px;background:#e08a2e;top:-140px;left:-100px"></div>
-    <div class="blob" style="width:360px;height:360px;background:#8c7355;bottom:-160px;right:-80px"></div>
-  </div>
 
-  <div id="titlebar">
-    <div id="drag-region"><span class="title">decupagem</span><span id="folder-label"></span></div>
+  <header id="titlebar">
+    <div id="drag-region">
+      <span class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc06b"/><stop offset="1" stop-color="#ff7a2f"/></linearGradient></defs>
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#bm)"/>
+          <path d="M8 8.5h8M8 12h5M8 15.5h8" stroke="#1b1003" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">Decupagem</span>
+      </span>
+      <span id="folder-label"></span>
+    </div>
     <div id="win-controls">
-      <button class="win-btn" id="btn-min" title="Minimizar">&#8211;</button>
-      <button class="win-btn" id="btn-max" title="Maximizar">&#9633;</button>
-      <button class="win-btn" id="btn-close" title="Fechar">&#10005;</button>
+      <button class="win-btn" id="btn-help" title="Atalhos (?)"><i data-icon="keyboard"></i></button>
+      <button class="win-btn" id="btn-min" title="Minimizar"><i data-icon="minimize"></i></button>
+      <button class="win-btn" id="btn-max" title="Maximizar"><i data-icon="maximize"></i></button>
+      <button class="win-btn close" id="btn-close" title="Fechar"><i data-icon="close"></i></button>
     </div>
-  </div>
+  </header>
 
-  <div id="content">
+  <main id="content">
 
-    <div id="empty-state">
-      <p class="empty-title">Escolha a pasta do job pra começar a decupar</p>
-      <button id="btn-choose" class="primary-btn">Escolher pasta</button>
-    </div>
-
-    <div id="grid-view" hidden>
-      <div id="grid-top">
-        <div id="folder-path"></div>
-        <div id="chips">
-          <button class="chip active" data-filter="todos">Todos <span></span></button>
-          <button class="chip" data-filter="pendentes">Pendentes <span></span></button>
-          <button class="chip" data-filter="talvez">Talvez <span></span></button>
-          <button class="chip" data-filter="aprovados">Aprovados <span></span></button>
-          <button class="chip" data-filter="descarte">Descarte <span></span></button>
+    <!-- tela inicial -->
+    <section id="home">
+      <div class="home-glow"></div>
+      <div class="home-card">
+        <div class="home-head">
+          <h1>Decupe fotos e vídeos sem sair do lugar</h1>
+          <p>RAW de qualquer câmera, JPEG, PNG, HEIC, MP4, MOV, MKV… Aprove, descarte, corte trechos e salve frames em qualidade máxima.</p>
         </div>
-        <button id="btn-trocar-pasta" class="ghost-btn">Trocar pasta</button>
+        <div id="dropzone">
+          <div class="dz-icon"><i data-icon="upload"></i></div>
+          <div class="dz-title">Arraste uma pasta ou arquivo pra cá</div>
+          <div class="dz-actions">
+            <button id="btn-choose" class="btn primary lg"><i data-icon="folder"></i>Abrir pasta do job</button>
+            <button id="btn-open-file" class="btn lg"><i data-icon="file"></i>Abrir arquivo</button>
+          </div>
+        </div>
+        <div id="recent-jobs" hidden>
+          <div class="section-label">Recentes</div>
+          <div id="recent-list"></div>
+        </div>
+        <div class="home-formats">
+          <span class="fmt">ARW · CR3 · NEF · DNG · RAF</span>
+          <span class="fmt">JPG · PNG · HEIC · TIFF · WEBP</span>
+          <span class="fmt">MP4 · MOV · MKV · AVI · MXF</span>
+        </div>
       </div>
-      <div id="grid"></div>
+    </section>
+
+    <!-- grade -->
+    <section id="browser" hidden>
+      <aside id="sidebar">
+        <div class="job-card">
+          <div class="job-icon"><i data-icon="folder"></i></div>
+          <div class="job-text">
+            <div id="job-name" class="job-name"></div>
+            <div id="job-path" class="job-path"></div>
+          </div>
+        </div>
+        <div class="job-actions">
+          <button id="btn-trocar-pasta" class="btn sm ghost"><i data-icon="folder"></i>Trocar pasta</button>
+          <button id="btn-open-file-2" class="btn sm ghost icon-only" title="Abrir arquivo"><i data-icon="file"></i></button>
+          <button id="btn-reload" class="btn sm ghost icon-only" title="Recarregar pasta"><i data-icon="refresh"></i></button>
+        </div>
+
+        <div class="progress-card">
+          <div class="progress-top"><span>Decupagem</span><strong id="progress-pct">0%</strong></div>
+          <div class="progress-bar"><div id="progress-fill"></div></div>
+          <div id="progress-text" class="progress-text"></div>
+        </div>
+
+        <nav id="filters">
+          <button class="filter active" data-filter="todos"><span class="dot all"></span>Todos<span class="count"></span></button>
+          <button class="filter" data-filter="pendentes"><span class="dot pending"></span>Pendentes<span class="count"></span></button>
+          <button class="filter" data-filter="talvez"><span class="dot maybe"></span>Talvez<span class="count"></span></button>
+          <button class="filter" data-filter="aprovados"><span class="dot approved"></span>Aprovados<span class="count"></span></button>
+          <button class="filter" data-filter="descarte"><span class="dot discarded"></span>Descarte<span class="count"></span></button>
+          <div class="filter-sep"></div>
+          <button class="filter" data-filter="exportados"><span class="dot exported"></span>Frames e cortes<span class="count"></span></button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <button id="btn-help-2" class="hint-link"><i data-icon="keyboard"></i>Atalhos do teclado <kbd>?</kbd></button>
+        </div>
+      </aside>
+
+      <div id="main">
+        <div id="toolbar">
+          <label class="search">
+            <i data-icon="search"></i>
+            <input id="search" type="text" placeholder="Buscar pelo nome" spellcheck="false">
+          </label>
+          <div class="segmented" id="kind-filter">
+            <button class="seg active" data-kind="all">Tudo</button>
+            <button class="seg" data-kind="photo"><i data-icon="image"></i>Fotos</button>
+            <button class="seg" data-kind="video"><i data-icon="video"></i>Vídeos</button>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <span id="result-count" class="result-count"></span>
+          <label class="size-slider" title="Tamanho das miniaturas">
+            <i data-icon="grid"></i>
+            <input id="thumb-size" type="range" min="130" max="340" step="10">
+          </label>
+        </div>
+        <div id="grid"></div>
+        <div id="grid-empty" hidden>
+          <i data-icon="image"></i>
+          <p>Nada aqui com esse filtro.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- visualizador -->
+    <section id="viewer" hidden>
+      <div class="v-top">
+        <button id="v-close" class="btn ghost sm"><i data-icon="arrowLeft"></i>Grade</button>
+        <div class="v-title">
+          <div id="v-name" class="v-name"></div>
+          <div id="v-meta" class="v-meta"></div>
+        </div>
+        <div class="v-top-right">
+          <span id="v-status" class="status-pill" hidden></span>
+          <span id="v-counter" class="v-counter"></span>
+        </div>
+      </div>
+
+      <div id="v-stage">
+        <img id="v-image" hidden draggable="false" alt="">
+        <video id="v-video" hidden preload="auto"></video>
+        <div id="v-loading" hidden>
+          <div class="spinner"></div>
+          <div id="v-loading-title">Carregando…</div>
+          <div id="v-loading-detail" class="v-loading-detail"></div>
+          <div class="v-loading-bar" hidden><div id="v-loading-fill"></div></div>
+        </div>
+        <div id="v-flash"></div>
+        <button class="v-nav prev" id="v-prev" title="Anterior (←)"><i data-icon="chevronLeft"></i></button>
+        <button class="v-nav next" id="v-next" title="Próximo (→)"><i data-icon="chevronRight"></i></button>
+        <div id="v-zoom-hint" hidden>Clique pra ver em 100%</div>
+      </div>
+
+      <div id="v-video-ui" hidden>
+        <div id="timeline">
+          <div class="tl-track">
+            <div id="tl-buffer"></div>
+            <div id="tl-played"></div>
+            <div id="tl-range" hidden></div>
+            <div id="tl-in" class="tl-mark" hidden></div>
+            <div id="tl-out" class="tl-mark" hidden></div>
+          </div>
+          <div id="tl-head"></div>
+          <div id="tl-hover" hidden></div>
+        </div>
+        <div class="transport">
+          <div class="tr-group">
+            <button id="tr-play" class="tr-btn big" title="Play/Pause (Espaço)"><i data-icon="play"></i></button>
+            <button id="tr-back" class="tr-btn" title="Frame anterior ( , )"><i data-icon="stepBack"></i></button>
+            <button id="tr-fwd" class="tr-btn" title="Próximo frame ( . )"><i data-icon="stepFwd"></i></button>
+            <div class="timecode"><span id="tc-cur">00:00:00:00</span><span class="tc-sep">/</span><span id="tc-dur">00:00:00:00</span></div>
+            <button id="tr-mute" class="tr-btn" title="Som (M)"><i data-icon="volume"></i></button>
+            <select id="tr-speed" title="Velocidade">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+
+          <div class="tr-group cut-group">
+            <button id="cut-in" class="mark-btn" title="Marcar entrada (I)"><kbd>I</kbd><span id="cut-in-tc">Entrada</span></button>
+            <button id="cut-out" class="mark-btn" title="Marcar saída (O)"><kbd>O</kbd><span id="cut-out-tc">Saída</span></button>
+            <button id="cut-clear" class="tr-btn" title="Limpar marcações (X)" hidden><i data-icon="close"></i></button>
+            <div class="split-btn">
+              <button id="cut-save" class="btn" title="Salvar trecho como vídeo novo (C)"><i data-icon="scissors"></i>Salvar corte</button>
+              <button id="cut-opts" class="btn caret" title="Modo do corte"><i data-icon="chevronDown"></i></button>
+            </div>
+          </div>
+
+          <div class="tr-group right">
+            <button id="tr-look" class="toggle-btn on" title="Simular Rec709 na tela (V)">Rec709</button>
+            <div class="split-btn">
+              <button id="frame-save" class="btn primary" title="Salvar o frame atual como imagem (S)"><i data-icon="camera"></i>Salvar frame<span id="frame-fmt" class="btn-sub">PNG 16-bit</span></button>
+              <button id="frame-opts" class="btn primary caret" title="Formato do frame"><i data-icon="chevronDown"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="v-decide">
+        <button data-action="discard" class="decide danger"><i data-icon="trash"></i>Excluir<kbd>Del</kbd></button>
+        <button data-action="maybe" class="decide"><i data-icon="question"></i>Talvez<kbd>T</kbd></button>
+        <button data-action="approve" class="decide ok"><i data-icon="check"></i>Aprovar<kbd>A</kbd></button>
+        <span class="decide-sep"></span>
+        <button data-action="folder" class="decide"><i data-icon="folderMove"></i>Pasta<kbd>P</kbd></button>
+        <button data-action="rename" class="decide"><i data-icon="pencil"></i>Renomear<kbd>R</kbd></button>
+        <button data-action="reveal" class="decide subtle" title="Mostrar no Explorer"><i data-icon="external"></i></button>
+      </div>
+
+      <!-- popovers -->
+      <div id="pop-rename" class="pop" hidden>
+        <div class="pop-title">Renomear arquivo</div>
+        <input id="rename-input" type="text" spellcheck="false">
+        <div class="pop-actions">
+          <button id="rename-cancel" class="btn ghost sm">Cancelar</button>
+          <button id="rename-ok" class="btn primary sm">Renomear</button>
+        </div>
+      </div>
+
+      <div id="pop-folder" class="pop" hidden>
+        <div class="pop-title">Mover pra pasta</div>
+        <div id="folder-recent"></div>
+        <input id="folder-input" type="text" placeholder="Nome da nova pasta" spellcheck="false">
+        <div class="pop-actions">
+          <button id="folder-cancel" class="btn ghost sm">Cancelar</button>
+          <button id="folder-ok" class="btn primary sm">Mover</button>
+        </div>
+      </div>
+
+      <div id="pop-frame" class="pop menu" hidden>
+        <div class="pop-title">Formato do frame</div>
+        <label class="opt"><input type="radio" name="frame-format" value="png"><span><strong>PNG</strong><small>Sem perda · 16-bit quando o vídeo é 10-bit</small></span></label>
+        <label class="opt"><input type="radio" name="frame-format" value="tiff"><span><strong>TIFF</strong><small>Sem perda · 16-bit · melhor pra tratar depois</small></span></label>
+        <label class="opt"><input type="radio" name="frame-format" value="jpg"><span><strong>JPEG</strong><small>Qualidade máxima · 4:4:4 · arquivo menor</small></span></label>
+        <div class="pop-sep"></div>
+        <label class="opt check"><input type="checkbox" id="frame-follow-look"><span><strong>Aplicar o Rec709 da tela</strong><small>Desligado salva o frame original (LOG)</small></span></label>
+        <div class="pop-note">Sempre na resolução original do arquivo.</div>
+      </div>
+
+      <div id="pop-clip" class="pop menu" hidden>
+        <div class="pop-title">Modo do corte</div>
+        <label class="opt"><input type="radio" name="clip-mode" value="exact"><span><strong>Exato</strong><small>Começa no frame marcado · recodifica em alta qualidade</small></span></label>
+        <label class="opt"><input type="radio" name="clip-mode" value="copy"><span><strong>Rápido</strong><small>Instantâneo e sem perda · pode começar um pouco antes</small></span></label>
+        <div class="pop-note">Salvo em <strong>Cortes</strong>, dentro da pasta do job.</div>
+      </div>
+    </section>
+
+    <div id="drop-overlay" hidden>
+      <div class="drop-box"><i data-icon="upload"></i><span>Solte pra abrir</span></div>
     </div>
 
-    <div id="fullscreen-view" hidden>
-      <div id="fs-media-wrap">
-        <img id="fs-image" hidden>
-        <video id="fs-video" hidden controls></video>
-        <div id="fs-badge"></div>
-        <div id="fs-counter"></div>
-        <button id="fs-rec709" class="fs-toggle" hidden>Rec709 simulado: ON</button>
-        <button id="fs-close" class="fs-toggle" style="right:12px;left:auto">Fechar (Esc)</button>
-      </div>
-      <div id="fs-bar">
-        <button data-action="discard" class="fs-btn danger"><span class="ic">&#10005;</span>Excluir</button>
-        <button data-action="maybe" class="fs-btn"><span class="ic">?</span>Talvez</button>
-        <button data-action="approve" class="fs-btn accent"><span class="ic">&#10003;</span>Aprovar</button>
-        <button data-action="folder" class="fs-btn"><span class="ic">&#128193;</span>Pasta</button>
-        <button data-action="rename" class="fs-btn"><span class="ic">&#9998;</span>Renomear</button>
-      </div>
-
-      <div id="fs-rename-pop" class="fs-pop" hidden>
-        <input id="fs-rename-input" type="text" spellcheck="false">
-        <button id="fs-rename-ok" class="primary-btn small">Renomear</button>
-        <button id="fs-rename-cancel" class="ghost-btn small">Cancelar</button>
-      </div>
-
-      <div id="fs-folder-pop" class="fs-pop" hidden>
-        <div id="fs-folder-recent"></div>
-        <input id="fs-folder-input" type="text" placeholder="nome da nova pasta" spellcheck="false">
-        <button id="fs-folder-ok" class="primary-btn small">Mover</button>
-        <button id="fs-folder-cancel" class="ghost-btn small">Cancelar</button>
+    <div id="help" hidden>
+      <div class="help-card">
+        <div class="help-head"><h2>Atalhos</h2><button id="help-close" class="win-btn"><i data-icon="close"></i></button></div>
+        <div class="help-cols">
+          <div>
+            <h3>Decupar</h3>
+            <dl>
+              <dt><kbd>A</kbd></dt><dd>Aprovar</dd>
+              <dt><kbd>T</kbd></dt><dd>Talvez</dd>
+              <dt><kbd>Del</kbd></dt><dd>Excluir (vai pra lixeira)</dd>
+              <dt><kbd>P</kbd></dt><dd>Mover pra pasta</dd>
+              <dt><kbd>R</kbd></dt><dd>Renomear</dd>
+              <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Anterior / próximo</dd>
+              <dt><kbd>Z</kbd></dt><dd>Zoom 100% na foto</dd>
+              <dt><kbd>Esc</kbd></dt><dd>Voltar pra grade</dd>
+            </dl>
+          </div>
+          <div>
+            <h3>Vídeo</h3>
+            <dl>
+              <dt><kbd>Espaço</kbd> <kbd>K</kbd></dt><dd>Play / pause</dd>
+              <dt><kbd>,</kbd> <kbd>.</kbd></dt><dd>Frame anterior / próximo</dd>
+              <dt><kbd>J</kbd> <kbd>L</kbd></dt><dd>Voltar / avançar 1 s</dd>
+              <dt><kbd>S</kbd></dt><dd>Salvar frame como imagem</dd>
+              <dt><kbd>I</kbd> <kbd>O</kbd></dt><dd>Marcar entrada / saída</dd>
+              <dt><kbd>C</kbd></dt><dd>Salvar corte</dd>
+              <dt><kbd>X</kbd></dt><dd>Limpar marcações</dd>
+              <dt><kbd>V</kbd> <kbd>M</kbd></dt><dd>Rec709 / som</dd>
+            </dl>
+          </div>
+        </div>
       </div>
     </div>
 
-  </div>
+    <div id="toasts"></div>
+  </main>
 </div>
+<script src="icons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
