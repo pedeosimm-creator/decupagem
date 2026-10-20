@@ -24,6 +24,8 @@
     filter: 'todos',
     kind: 'all',
     query: '',
+    view: prefs.get('view', 'grid'),
+    sort: prefs.get('sort', 'name'),
     vItems: [],
     vIndex: -1,
     previewCache: new Map(),
@@ -45,11 +47,11 @@
     home: $('home'), browser: $('browser'), viewer: $('viewer'),
     folderLabel: $('folder-label'), jobName: $('job-name'), jobPath: $('job-path'),
     grid: $('grid'), gridEmpty: $('grid-empty'), filters: $('filters'), resultCount: $('result-count'),
-    search: $('search'), kindFilter: $('kind-filter'), thumbSize: $('thumb-size'),
+    search: $('search'), kindFilter: $('kind-filter'), thumbSize: $('thumb-size'), viewMode: $('view-mode'), sortMode: $('sort-mode'),
     progressPct: $('progress-pct'), progressFill: $('progress-fill'), progressText: $('progress-text'),
     recentJobs: $('recent-jobs'), recentList: $('recent-list'), dropzone: $('dropzone'), dropOverlay: $('drop-overlay'),
     stage: $('v-stage'), image: $('v-image'), video: $('v-video'), vName: $('v-name'), vMeta: $('v-meta'),
-    vCounter: $('v-counter'), vStatus: $('v-status'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
+    vCounter: $('v-counter'), vStatus: $('v-status'), vAlternate: $('v-alternate'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
     loading: $('v-loading'), loadingTitle: $('v-loading-title'), loadingDetail: $('v-loading-detail'), loadingFill: $('v-loading-fill'),
     flash: $('v-flash'), videoUi: $('v-video-ui'), timeline: $('timeline'), tlPlayed: $('tl-played'), tlBuffer: $('tl-buffer'),
     tlRange: $('tl-range'), tlIn: $('tl-in'), tlOut: $('tl-out'), tlHead: $('tl-head'), tlHover: $('tl-hover'),
@@ -84,6 +86,10 @@
     let v = bytes;
     while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
     return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+  }
+
+  function formatDateTime(ms) {
+    return ms ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(ms)) : '—';
   }
 
   function formatDuration(sec) {
@@ -299,7 +305,9 @@
 
   function visibleItems() {
     const q = state.query.trim().toLowerCase();
-    return state.items.filter((it) => statusMatches(it.status, state.filter) && kindMatches(it) && (!q || it.name.toLowerCase().includes(q)));
+    const items = state.items.filter((it) => statusMatches(it.status, state.filter) && kindMatches(it) && (!q || it.name.toLowerCase().includes(q)));
+    if (state.sort !== 'name') items.sort((a, b) => (state.sort === 'date-desc' ? b.mtimeMs - a.mtimeMs : a.mtimeMs - b.mtimeMs) || collator.compare(a.name, b.name));
+    return items;
   }
 
   function syncFilterButtons() {
@@ -320,6 +328,29 @@
     if (!btn) return;
     state.kind = btn.dataset.kind;
     syncFilterButtons();
+    renderGrid();
+  });
+
+  function syncViewButtons() {
+    for (const b of el.viewMode.querySelectorAll('.seg')) b.classList.toggle('active', b.dataset.view === state.view);
+    el.thumbSize.hidden = state.view === 'list';
+    el.grid.classList.toggle('list-view', state.view === 'list');
+  }
+  if (!['grid', 'list'].includes(state.view)) state.view = 'grid';
+  if (!['name', 'date-desc', 'date-asc'].includes(state.sort)) state.sort = 'name';
+  el.sortMode.value = state.sort;
+  syncViewButtons();
+  el.viewMode.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-view]');
+    if (!btn) return;
+    state.view = btn.dataset.view;
+    prefs.set('view', state.view);
+    syncViewButtons();
+    renderGrid();
+  });
+  el.sortMode.addEventListener('change', () => {
+    state.sort = el.sortMode.value;
+    prefs.set('sort', state.sort);
     renderGrid();
   });
 
@@ -393,13 +424,15 @@
       const phIcon = item.status === 'discarded' ? 'trash' : item.kind === 'video' ? 'film' : 'image';
       const statusKey = item.status && item.status.startsWith('custom:') ? 'custom' : item.status;
       const meta = item.status === 'discarded' ? 'Na lixeira' : [extLabel, formatSize(item.size)].filter(Boolean).join(' · ');
+      const location = item.path ? item.path.slice(state.folderPath.length).replace(/^[\\/]+/, '').replace(/[\\/][^\\/]+$/, '') || 'Raiz' : '—';
       tile.innerHTML = `
         <div class="thumb">
           <div class="ph">${icon(phIcon)}</div>
           ${item.kind === 'raw' ? `<span class="tag">RAW · ${escapeHtml(extLabel)}</span>` : ''}
           ${STATUS_ICON[statusKey] || statusKey === 'custom' ? `<span class="status ${statusKey}">${icon(STATUS_ICON[statusKey] || 'folder')}</span>` : ''}
         </div>
-        <div class="cap"><span class="n" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><span class="m">${escapeHtml(meta)}</span></div>`;
+        <div class="cap"><span class="n" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><span class="m">${escapeHtml(meta)}</span></div>
+        <div class="list-detail"><span title="Data e hora de modificação do arquivo">${formatDateTime(item.mtimeMs)}</span><span>${escapeHtml(meta)}</span><span title="Pasta relativa ao job">${escapeHtml(location)}</span></div>`;
       if (item.status !== 'discarded') {
         tile.addEventListener('click', () => openViewer(list, list.indexOf(item)));
         thumbObserver.observe(tile);
@@ -517,6 +550,7 @@
     if (info && info.codec) chips.push(`<span class="chip">${escapeHtml(info.codec.toUpperCase())}</span>`);
     if (info && info.duration) chips.push(`<span class="chip">${formatDuration(info.duration)}</span>`);
     if (item.size) chips.push(`<span class="chip">${formatSize(item.size)}</span>`);
+    if (item.mtimeMs) chips.push(`<span class="chip" title="Data e hora de modificação do arquivo">${formatDateTime(item.mtimeMs)}</span>`);
     if (state.usingProxy) chips.push('<span class="chip hl" title="O formato não toca direto; você assiste uma cópia leve, mas frame e corte usam o original">prévia convertida</span>');
     el.vMeta.innerHTML = chips.join('');
   }
@@ -537,6 +571,7 @@
     el.vStatus.textContent = STATUS_LABEL[statusKey] || '';
     el.vPrev.disabled = state.vIndex === 0;
     el.vNext.disabled = state.vIndex >= state.vItems.length - 1;
+    el.vAlternate.hidden = item.kind === 'video';
 
     el.video.pause();
     el.video.hidden = true;
@@ -576,6 +611,18 @@
       el.zoomHint.hidden = !(el.image.naturalWidth > el.image.clientWidth + 4);
     };
   }
+
+  el.vAlternate.addEventListener('click', async () => {
+    const item = state.vItems[state.vIndex];
+    if (!item || item.kind === 'video') return;
+    showLoading('Gerando outra prévia…');
+    const url = await previewapi.alternate(item);
+    if (state.vItems[state.vIndex] !== item) return;
+    hideLoading();
+    if (!url) { errorToast('Não consegui gerar outra prévia', item.name); return; }
+    state.previewCache.set(item.path, url);
+    el.image.src = url;
+  });
 
   async function showVideo(item) {
     el.video.hidden = false;

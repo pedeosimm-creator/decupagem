@@ -25,6 +25,7 @@ node scripts/make-icon.js
 
 cp main.js preload.js package.json "$APP/"
 cp -r src "$APP/src"
+cp -r assets "$APP/assets"
 cp -r node_modules "$APP/node_modules"
 rm -rf "$APP/node_modules/electron" "$APP/node_modules/.bin"
 

@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('sessionapi', {
 contextBridge.exposeInMainWorld('previewapi', {
   thumbnail: (item) => ipcRenderer.invoke('preview:thumbnail', item),
   full: (item) => ipcRenderer.invoke('preview:full', item),
+  alternate: (item) => ipcRenderer.invoke('preview:alternate', item),
 });
 
 contextBridge.exposeInMainWorld('mediaapi', {

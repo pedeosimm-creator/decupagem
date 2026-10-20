@@ -108,6 +108,15 @@
           </div>
           <div class="toolbar-spacer"></div>
           <span id="result-count" class="result-count"></span>
+          <div class="segmented" id="view-mode" aria-label="Modo de visualização">
+            <button class="seg active" data-view="grid" title="Grade" aria-label="Grade"><i data-icon="grid"></i></button>
+            <button class="seg" data-view="list" title="Lista com detalhes" aria-label="Lista com detalhes"><i data-icon="list"></i></button>
+          </div>
+          <select id="sort-mode" class="sort-mode" aria-label="Ordenar arquivos">
+            <option value="name">Nome</option>
+            <option value="date-desc">Mais recentes</option>
+            <option value="date-asc">Mais antigos</option>
+          </select>
           <label class="size-slider" title="Tamanho das miniaturas">
             <i data-icon="grid"></i>
             <input id="thumb-size" type="range" min="130" max="340" step="10">
@@ -130,6 +139,7 @@
           <div id="v-meta" class="v-meta"></div>
         </div>
         <div class="v-top-right">
+          <button id="v-alternate" class="btn ghost sm" hidden title="Gerar outra prévia se a foto aparecer com listras">Outra prévia</button>
           <span id="v-status" class="status-pill" hidden></span>
           <span id="v-counter" class="v-counter"></span>
         </div>

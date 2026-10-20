@@ -1,6 +1,6 @@
 {
   "name": "decupagem",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Decupagem rápida de fotos e vídeos (RAW/ARW, LOG) — revisar, aprovar, descartar, organizar",
   "main": "main.js",
   "private": true,

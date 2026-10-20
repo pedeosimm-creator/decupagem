@@ -224,6 +224,8 @@ kbd {
 .result-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .size-slider { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .size-slider input { width: 100px; accent-color: var(--accent); }
+.sort-mode { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); }
+.sort-mode:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 #grid {
   flex: 1; overflow-y: auto; display: grid; align-content: start;
@@ -274,6 +276,14 @@ kbd {
 .tile .cap { padding: 8px 10px 9px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tile .cap .n { font-size: 12px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 .tile .cap .m { font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .list-detail { display: none; }
+#grid.list-view { display: flex; flex-direction: column; gap: 6px; }
+#grid.list-view .tile { display: grid; grid-template-columns: 72px minmax(160px, 1.4fr) minmax(360px, 2fr); min-height: 64px; align-items: center; contain-intrinsic-size: 64px 64px; }
+#grid.list-view .tile .thumb { width: 72px; height: 62px; aspect-ratio: auto; }
+#grid.list-view .tile .cap { padding: 8px 12px; }
+#grid.list-view .tile .list-detail { display: grid; grid-template-columns: minmax(145px, 1.2fr) minmax(95px, .8fr) minmax(110px, 1fr); gap: 12px; padding: 0 14px; color: var(--text-2); font-size: 11px; min-width: 0; }
+#grid.list-view .tile .list-detail span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#grid.list-view .tile .list-detail span:first-child { font-variant-numeric: tabular-nums; }
 .tile.ghost { cursor: default; opacity: .5; }
 .tile.ghost:hover { transform: none; box-shadow: none; border-color: var(--line); }
 .tile.ghost .ph { animation: none; background: repeating-linear-gradient(135deg, #131316 0 10px, #16161a 10px 20px); }

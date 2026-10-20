@@ -7,6 +7,10 @@ const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { exiftool } = require('exiftool-vendored');
 
+// Alguns drivers mostram faixas nas imagens decodificadas pelo Chromium/GPU.
+// O app de revisão prioriza uma prévia estável; vídeo continua funcional em CPU.
+app.disableHardwareAcceleration();
+
 let trashFn;
 async function trash(paths) {
   if (!trashFn) trashFn = (await import('trash')).default;
@@ -118,7 +122,7 @@ async function withRetry(fn, attempts = 6, delayMs = 150) {
     try {
       return await fn();
     } catch (err) {
-      const locked = err && (err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES');
+      const locked = err && (err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES' || /move item to trash|continua na pasta/i.test(err.message || ''));
       if (!locked || i === attempts - 1) throw err;
       await sleep(delayMs);
     }
@@ -500,7 +504,7 @@ async function saveClip({ folderPath, filePath, start, end, mode, jobId }) {
 // ---- preview / thumbnail extraction ----
 
 function cacheKeyFor(item) {
-  return crypto.createHash('sha1').update(`${item.path}|${item.size}|${item.mtimeMs}`).digest('hex');
+  return crypto.createHash('sha1').update(`v2|${item.path}|${item.size}|${item.mtimeMs}`).digest('hex');
 }
 
 function urlIfExists(file) {
@@ -551,14 +555,17 @@ async function getThumbnail(item) {
   }
 
   if (item.kind === 'image') {
-    // miniatura do próprio Windows: rápida, respeita a orientação e evita
-    // decodificar fotos de 40 MB inteiras só pra mostrar na grade
+    // O decoder de miniaturas do Windows pode produzir faixas em fotos de
+    // certas câmeras; FFmpeg gera uma prévia independente dele.
     try {
-      return await shellThumbnail(item, dest, 480, 82);
+      const converted = await ffmpegStill(item.path, dest, { width: 480 });
+      if (converted) return converted;
     } catch {
-      if (WEB_IMAGE_EXTS.has(item.ext)) return pathToFileURL(item.path).href;
-      return getFullPreview(item);
+      // usa o decoder do sistema como alternativa
     }
+    try { return await shellThumbnail(item, dest, 480, 82); } catch { /* próxima alternativa */ }
+    if (WEB_IMAGE_EXTS.has(item.ext)) return pathToFileURL(item.path).href;
+    return getFullPreview(item);
   }
 
   if (item.kind !== 'raw') return null;
@@ -612,6 +619,19 @@ async function getFullPreview(item) {
   if (!urlIfExists(dest)) return null;
   await copyOrientation(item.path, dest);
   return urlIfExists(dest);
+}
+
+async function getAlternatePreview(item) {
+  if (item.kind !== 'raw' && item.kind !== 'image') return null;
+  const dest = path.join(PREVIEW_DIR, `${cacheKeyFor(item)}-alternate.jpg`);
+  const cached = urlIfExists(dest);
+  if (cached) return cached;
+  try {
+    const converted = await ffmpegStill(item.path, dest, { width: 4096 });
+    if (converted) return converted;
+  } catch { /* formato não aceito pelo FFmpeg */ }
+  try { return await shellThumbnail(item, dest, 4096, 90); }
+  catch { return null; }
 }
 
 // Vídeo que o Chromium não decodifica (10-bit 4:2:2, ProRes, AVI, MXF...) ganha
@@ -756,7 +776,18 @@ ipcMain.handle('session:decide', async (_e, { folderPath, filePath, action, extr
       return { ok: true, newPath: dest, newStatus: action === 'approve' ? 'approved' : 'maybe' };
     }
     if (action === 'discard') {
-      await withRetry(() => trash([filePath]));
+      // A API nativa do Electron não interpreta o caminho como glob. A
+      // alternativa cobre sistemas nos quais a lixeira do shell falha.
+      await sleep(250);
+      await withRetry(async () => {
+        try {
+          await shell.trashItem(filePath);
+        } catch (nativeError) {
+          try { await trash([filePath], { glob: false }); }
+          catch { throw nativeError; }
+        }
+        if (fs.existsSync(filePath)) throw new Error('O arquivo continua na pasta após enviar à lixeira');
+      }, 8, 250);
       await appendDiscarded(folderPath, path.basename(filePath));
       return { ok: true, newPath: null, newStatus: 'discarded' };
     }
@@ -798,6 +829,11 @@ ipcMain.handle('preview:full', async (_e, item) => {
   } catch {
     return null;
   }
+});
+
+ipcMain.handle('preview:alternate', async (_e, item) => {
+  try { return await getAlternatePreview(item); }
+  catch { return null; }
 });
 
 // ---- IPC: vídeo (probe, proxy, frame, corte) ----
