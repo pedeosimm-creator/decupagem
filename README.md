@@ -1,0 +1,24 @@
+# Decupagem
+
+App Windows para revisar, organizar e descartar fotos e vídeos. Suporta RAW, formatos comuns e prévias de vídeo.
+
+## Hub Pedro
+
+O Hub identifica o app como `decupagem`, instala em `%LOCALAPPDATA%\Programs\Decupagem` e procura a última release do repositório configurado no `apps.json`. O ativo deve se chamar **`decupagem.zip`** e conter, na raiz, `decupagem.exe`, `versao.txt` e as dependências do Electron em `resources/app`.
+
+Hoje o código e as releases estão no mesmo repositório público `pedeosimm-creator/decupagem`. O script abaixo usa esse endereço por padrão para manter os Hubs já instalados funcionando. A separação em código privado e releases públicas exige criar `decupagem-releases` e atualizar o catálogo distribuído pelo Hub.
+
+## Publicar uma atualização
+
+1. Atualize a versão em `package.json` e `package-lock.json` para `X.Y.Z`.
+2. Teste o app e faça commit do código.
+3. No Windows com Node.js e Git Bash instalados, execute:
+
+```powershell
+.\publicar.ps1 -Versao vX.Y.Z          # compila e valida o ZIP, sem publicar
+.\publicar.ps1 -Versao vX.Y.Z -Enviar  # cria a release e envia decupagem.zip
+```
+
+Se o build já estiver pronto, passe `-PastaBuild .\dist\decupagem-win32-x64`. O script confere a versão, o executável, os arquivos da interface, os caminhos do ZIP e o nome do ativo. Repetir `-Enviar` após uma falha de upload reaproveita o rascunho; uma release já publicada não é sobrescrita. Por padrão, conserva as três releases mais recentes.
+
+O app guarda configurações e prévias em `app.getPath('userData')`, fora da pasta substituída pelo Hub. Fotos e vídeos originais ficam nas pastas escolhidas pelo usuário.
