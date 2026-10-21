@@ -4,6 +4,7 @@ const { exiftool } = require('exiftool-vendored');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+process.env.DECUPAGEM_SMOKE = '1';
 require('../main.js');
 
 async function orientation(file) { return Number((await exiftool.read(file)).Orientation) || 1; }

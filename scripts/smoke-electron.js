@@ -3,6 +3,7 @@ const { app, BrowserWindow, nativeImage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+process.env.DECUPAGEM_SMOKE = '1';
 require('../main.js');
 
 async function run() {

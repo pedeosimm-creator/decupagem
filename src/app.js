@@ -46,12 +46,12 @@
   const el = {
     home: $('home'), browser: $('browser'), viewer: $('viewer'),
     folderLabel: $('folder-label'), jobName: $('job-name'), jobPath: $('job-path'),
-    grid: $('grid'), gridEmpty: $('grid-empty'), filters: $('filters'), resultCount: $('result-count'),
+    grid: $('grid'), gridEmpty: $('grid-empty'), filters: $('filters'), resultCount: $('result-count'), trashRejected: $('btn-trash-rejected'),
     search: $('search'), kindFilter: $('kind-filter'), thumbSize: $('thumb-size'), viewMode: $('view-mode'), sortMode: $('sort-mode'),
     progressPct: $('progress-pct'), progressFill: $('progress-fill'), progressText: $('progress-text'),
     recentJobs: $('recent-jobs'), recentList: $('recent-list'), dropzone: $('dropzone'), dropOverlay: $('drop-overlay'),
     stage: $('v-stage'), image: $('v-image'), video: $('v-video'), vName: $('v-name'), vMeta: $('v-meta'),
-    vCounter: $('v-counter'), vStatus: $('v-status'), vAlternate: $('v-alternate'), vRotateLeft: $('v-rotate-left'), vRotateRight: $('v-rotate-right'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
+    vCounter: $('v-counter'), vStatus: $('v-status'), vAlternate: $('v-alternate'), vRotateLeft: $('v-rotate-left'), vRotateRight: $('v-rotate-right'), vReject: $('v-reject'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
     loading: $('v-loading'), loadingTitle: $('v-loading-title'), loadingDetail: $('v-loading-detail'), loadingFill: $('v-loading-fill'),
     flash: $('v-flash'), videoUi: $('v-video-ui'), timeline: $('timeline'), tlPlayed: $('tl-played'), tlBuffer: $('tl-buffer'),
     tlRange: $('tl-range'), tlIn: $('tl-in'), tlOut: $('tl-out'), tlHead: $('tl-head'), tlHover: $('tl-hover'),
@@ -284,10 +284,11 @@
   // ---- filtros ----
 
   function statusMatches(status, filter) {
-    if (filter === 'todos') return status !== 'exported';
+    if (filter === 'todos') return status !== 'exported' && status !== 'rejected' && status !== 'discarded';
     if (filter === 'pendentes') return status === 'pending';
     if (filter === 'talvez') return status === 'maybe';
     if (filter === 'aprovados') return status === 'approved';
+    if (filter === 'desaprovadas') return status === 'rejected';
     if (filter === 'descarte') return status === 'discarded';
     if (filter === 'exportados') return status === 'exported';
     return true;
@@ -368,28 +369,47 @@
   });
 
   function updateCounts() {
-    const counts = { todos: 0, pendentes: 0, talvez: 0, aprovados: 0, descarte: 0, exportados: 0 };
+    const counts = { todos: 0, pendentes: 0, talvez: 0, aprovados: 0, desaprovadas: 0, descarte: 0, exportados: 0 };
     for (const it of state.items) {
       if (it.status === 'exported') { counts.exportados++; continue; }
+      if (it.status === 'discarded') { counts.descarte++; continue; }
+      if (it.status === 'rejected') { counts.desaprovadas++; continue; }
       counts.todos++;
       if (it.status === 'pending') counts.pendentes++;
       else if (it.status === 'maybe') counts.talvez++;
       else if (it.status === 'approved') counts.aprovados++;
-      else if (it.status === 'discarded') counts.descarte++;
     }
     for (const b of el.filters.querySelectorAll('.filter')) b.querySelector('.count').textContent = counts[b.dataset.filter] || '';
-    const decided = counts.todos - counts.pendentes;
-    const pct = counts.todos ? Math.round((decided / counts.todos) * 100) : 0;
+    el.trashRejected.hidden = state.filter !== 'desaprovadas' || counts.desaprovadas === 0;
+    el.trashRejected.innerHTML = `${icon('trash')}Excluir ${counts.desaprovadas} desaprovada${counts.desaprovadas === 1 ? '' : 's'}`;
+    const total = counts.todos + counts.desaprovadas;
+    const decided = total - counts.pendentes;
+    const pct = total ? Math.round((decided / total) * 100) : 0;
     el.progressPct.textContent = `${pct}%`;
     el.progressFill.style.width = `${pct}%`;
-    el.progressText.textContent = counts.todos
-      ? (counts.pendentes ? `${decided} de ${counts.todos} decididos · faltam ${counts.pendentes}` : `Tudo decidido · ${counts.todos} arquivos`)
+    el.progressText.textContent = total
+      ? (counts.pendentes ? `${decided} de ${total} decididos · faltam ${counts.pendentes}` : `Tudo decidido · ${total} arquivos`)
       : 'Nenhuma foto ou vídeo nesta pasta';
   }
 
+  el.trashRejected.addEventListener('click', async () => {
+    if (!state.folderPath || el.trashRejected.disabled) return;
+    const count = state.items.filter((it) => it.status === 'rejected').length;
+    if (!count || !window.confirm(`Enviar ${count} arquivo${count === 1 ? '' : 's'} de Desaprovadas para a Lixeira do Windows?\n\nAs outras pilhas não serão alteradas.`)) return;
+    el.trashRejected.disabled = true;
+    const folder = state.folderPath;
+    let result;
+    try { result = await sessionapi.trashRejected({ folderPath: folder }); }
+    catch (err) { result = { ok: false, deleted: [], errors: [{ error: String(err && err.message ? err.message : err) }] }; }
+    el.trashRejected.disabled = false;
+    await loadFolder(folder);
+    if (result.ok) toast({ kind: 'ok', title: `${result.deleted.length} arquivo${result.deleted.length === 1 ? '' : 's'} enviado${result.deleted.length === 1 ? '' : 's'} à Lixeira` });
+    else errorToast('Alguns arquivos não foram excluídos', (result.errors || []).slice(0, 3).map((e) => `${e.name}: ${e.error}`).join(' · '));
+  });
+
   // ---- grade ----
 
-  const STATUS_ICON = { approved: 'check', maybe: 'question', discarded: 'close', exported: 'camera' };
+  const STATUS_ICON = { approved: 'check', maybe: 'question', rejected: 'close', discarded: 'close', exported: 'camera' };
   let gridToken = 0;
   let thumbObserver = null;
   const thumbQueue = [];
@@ -538,7 +558,7 @@
     el.loading.hidden = true;
   }
 
-  const STATUS_LABEL = { pending: 'Pendente', approved: 'Aprovado', maybe: 'Talvez', exported: 'Exportado' };
+  const STATUS_LABEL = { pending: 'Pendente', approved: 'Aprovado', maybe: 'Talvez', rejected: 'Desaprovado', exported: 'Exportado' };
 
   function renderMeta(item, info) {
     const chips = [];
@@ -572,6 +592,9 @@
     el.vPrev.disabled = state.vIndex === 0;
     el.vNext.disabled = state.vIndex >= state.vItems.length - 1;
     el.vAlternate.hidden = item.kind === 'video';
+    const rejected = item.status === 'rejected';
+    el.vReject.dataset.action = rejected ? 'restore' : 'reject';
+    el.vReject.innerHTML = rejected ? `${icon('refresh')}Voltar para pendentes<kbd>U</kbd>` : `${icon('close')}Desaprovar<kbd>Del</kbd>`;
     const canRotate = item.kind !== 'video' && /\.(jpe?g|jfif|tiff?|heic|heif|arw|srf|sr2|cr2|cr3|crw|nef|nrw|dng|raf|orf|rw2|pef|srw|3fr|iiq|rwl|x3f|erf|kdc|mrw|mos)$/i.test(item.ext);
     el.vRotateLeft.hidden = !canRotate;
     el.vRotateRight.hidden = !canRotate;
@@ -1268,7 +1291,8 @@
       case 'ArrowLeft': e.preventDefault(); goToOffset(-1); return;
       case 'a': handleAction('approve'); return;
       case 't': handleAction('maybe'); return;
-      case 'Delete': case 'Backspace': handleAction('discard'); return;
+      case 'Delete': case 'Backspace': if (state.vItems[state.vIndex]?.status !== 'rejected') handleAction('reject'); return;
+      case 'u': if (state.vItems[state.vIndex]?.status === 'rejected') handleAction('restore'); return;
       case 'r': handleAction('rename'); return;
       case 'p': handleAction('folder'); return;
       case 'z': if (!isVideo) setZoom(!el.stage.classList.contains('zoomed')); return;

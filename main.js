@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -30,6 +30,8 @@ const MEDIA_EXTS = new Set([...RAW_EXTS, ...IMAGE_EXTS, ...VIDEO_EXTS]);
 
 // pastas onde o app grava o que exporta (frames e cortes), na raiz do job
 const EXPORT_DIRS = { frames: 'Frames', clips: 'Cortes' };
+const REJECTED_DIR = 'Desaprovadas';
+const ORIGINAL_BACKUP_SUFFIX = '.decupagem-original';
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -130,8 +132,9 @@ async function withRetry(fn, attempts = 6, delayMs = 150) {
   }
 }
 
-async function uniquePath(target) {
-  if (!fs.existsSync(target)) return target;
+async function uniquePath(target, sidecars = []) {
+  const available = (candidate) => !fs.existsSync(candidate) && sidecars.every((suffix) => !fs.existsSync(candidate + suffix));
+  if (available(target)) return target;
   const dir = path.dirname(target);
   const ext = path.extname(target);
   const base = path.basename(target, ext);
@@ -140,8 +143,37 @@ async function uniquePath(target) {
   do {
     candidate = path.join(dir, `${base} (${i})${ext}`);
     i++;
-  } while (fs.existsSync(candidate));
+  } while (!available(candidate));
   return candidate;
+}
+
+async function moveMediaWithBackup(filePath, target) {
+  const backup = filePath + ORIGINAL_BACKUP_SUFFIX;
+  const hasBackup = fs.existsSync(backup);
+  const dest = await uniquePath(target, hasBackup ? [ORIGINAL_BACKUP_SUFFIX] : []);
+  await withRetry(() => fsp.rename(filePath, dest));
+  if (hasBackup) {
+    try {
+      await withRetry(() => fsp.rename(backup, dest + ORIGINAL_BACKUP_SUFFIX));
+    } catch (err) {
+      try { await withRetry(() => fsp.rename(dest, filePath)); }
+      catch { throw new Error(`Foto movida para ${dest}, mas não consegui mover o backup: ${err.message}`); }
+      throw err;
+    }
+  }
+  return dest;
+}
+
+async function trashFile(filePath) {
+  await sleep(250);
+  await withRetry(async () => {
+    try { await shell.trashItem(filePath); }
+    catch (nativeError) {
+      try { await trash([filePath], { glob: false }); }
+      catch { throw nativeError; }
+    }
+    if (fs.existsSync(filePath)) throw new Error('O arquivo continua na pasta após enviar à lixeira');
+  }, 8, 250);
 }
 
 function fileEntry(full, name, st) {
@@ -211,7 +243,7 @@ async function listMediaFilesDeep(root, excludeTop, maxDepth = 6, maxFiles = 500
 async function buildSessionItems(folderPath) {
   const log = await loadSessionLog(folderPath);
   const excludeTop = new Set([
-    'aprovado', 'talvez',
+    'aprovado', 'talvez', REJECTED_DIR.toLowerCase(),
     ...Object.values(EXPORT_DIRS).map((f) => f.toLowerCase()),
     ...log.customFolders.map((f) => f.toLowerCase()),
     ...log.recentFolders.map((f) => f.toLowerCase()),
@@ -219,6 +251,7 @@ async function buildSessionItems(folderPath) {
   const rootFiles = await listMediaFilesDeep(folderPath, excludeTop);
   const approvedFiles = await listMediaFiles(path.join(folderPath, 'Aprovado'));
   const maybeFiles = await listMediaFiles(path.join(folderPath, 'Talvez'));
+  const rejectedFiles = await listMediaFiles(path.join(folderPath, REJECTED_DIR));
   const exportedFiles = [
     ...(await listMediaFiles(path.join(folderPath, EXPORT_DIRS.frames))),
     ...(await listMediaFiles(path.join(folderPath, EXPORT_DIRS.clips))),
@@ -228,6 +261,7 @@ async function buildSessionItems(folderPath) {
   for (const f of rootFiles) items.push({ ...f, status: 'pending', id: f.path });
   for (const f of approvedFiles) items.push({ ...f, status: 'approved', id: f.path });
   for (const f of maybeFiles) items.push({ ...f, status: 'maybe', id: f.path });
+  for (const f of rejectedFiles) items.push({ ...f, status: 'rejected', id: f.path });
   for (const f of exportedFiles) items.push({ ...f, status: 'exported', id: f.path });
   for (const d of log.discarded) {
     items.push({ name: d.name, path: null, ext: path.extname(d.name).toLowerCase(), kind: 'ghost', size: 0, mtimeMs: 0, status: 'discarded', id: `ghost:${d.name}:${d.at}`, discardedAt: d.at });
@@ -505,7 +539,7 @@ async function saveClip({ folderPath, filePath, start, end, mode, jobId }) {
 // ---- preview / thumbnail extraction ----
 
 function cacheKeyFor(item) {
-  return crypto.createHash('sha1').update(`v2|${item.path}|${item.size}|${item.mtimeMs}`).digest('hex');
+  return crypto.createHash('sha1').update(`v3|${item.path}|${item.size}|${item.mtimeMs}`).digest('hex');
 }
 
 function urlIfExists(file) {
@@ -519,7 +553,7 @@ async function copyOrientation(srcPath, destJpg) {
     const tags = await exiftool.read(srcPath);
     const orientation = Number(tags.Orientation);
     if (orientation && orientation !== 1) {
-      await exiftool.write(destJpg, { Orientation: orientation }, ['-overwrite_original']);
+      await exiftool.write(destJpg, { 'Orientation#': orientation }, ['-overwrite_original']);
     }
   } catch {
     // sem orientação legível, fica como está
@@ -667,11 +701,18 @@ async function ensureProxy(item, jobId) {
 let win;
 
 function createWindow() {
+  const leftDisplay = screen.getAllDisplays().sort((a, b) => a.bounds.x - b.bounds.x)[0] || screen.getPrimaryDisplay();
+  const area = leftDisplay.workArea;
+  const width = Math.min(1440, area.width);
+  const height = Math.min(900, area.height);
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    x: area.x + Math.floor((area.width - width) / 2),
+    y: area.y + Math.floor((area.height - height) / 2),
+    width,
+    height,
     minWidth: 980,
     minHeight: 640,
+    show: process.env.DECUPAGEM_SMOKE !== '1',
     frame: false,
     backgroundColor: '#0e0e10',
     icon: path.join(__dirname, 'assets', 'icon.ico'),
@@ -772,23 +813,24 @@ ipcMain.handle('session:decide', async (_e, { folderPath, filePath, action, extr
     if (action === 'approve' || action === 'maybe') {
       const destDir = path.join(folderPath, action === 'approve' ? 'Aprovado' : 'Talvez');
       await fsp.mkdir(destDir, { recursive: true });
-      const dest = await uniquePath(path.join(destDir, path.basename(filePath)));
-      await withRetry(() => fsp.rename(filePath, dest));
+      const dest = await moveMediaWithBackup(filePath, path.join(destDir, path.basename(filePath)));
       return { ok: true, newPath: dest, newStatus: action === 'approve' ? 'approved' : 'maybe' };
     }
+    if (action === 'reject') {
+      const relative = path.relative(path.resolve(folderPath), path.resolve(filePath));
+      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Arquivo fora da pasta aberta');
+      const destDir = path.join(folderPath, REJECTED_DIR);
+      await fsp.mkdir(destDir, { recursive: true });
+      const dest = await moveMediaWithBackup(filePath, path.join(destDir, path.basename(filePath)));
+      return { ok: true, newPath: dest, newStatus: 'rejected' };
+    }
+    if (action === 'restore') {
+      if (path.resolve(path.dirname(filePath)) !== path.resolve(path.join(folderPath, REJECTED_DIR))) throw new Error('Arquivo não está em Desaprovadas');
+      const dest = await moveMediaWithBackup(filePath, path.join(folderPath, path.basename(filePath)));
+      return { ok: true, newPath: dest, newStatus: 'pending' };
+    }
     if (action === 'discard') {
-      // A API nativa do Electron não interpreta o caminho como glob. A
-      // alternativa cobre sistemas nos quais a lixeira do shell falha.
-      await sleep(250);
-      await withRetry(async () => {
-        try {
-          await shell.trashItem(filePath);
-        } catch (nativeError) {
-          try { await trash([filePath], { glob: false }); }
-          catch { throw nativeError; }
-        }
-        if (fs.existsSync(filePath)) throw new Error('O arquivo continua na pasta após enviar à lixeira');
-      }, 8, 250);
+      await trashFile(filePath);
       await appendDiscarded(folderPath, path.basename(filePath));
       return { ok: true, newPath: null, newStatus: 'discarded' };
     }
@@ -796,16 +838,14 @@ ipcMain.handle('session:decide', async (_e, { folderPath, filePath, action, extr
       if (!extra) return { ok: false, error: 'nome de pasta vazio' };
       const destDir = path.join(folderPath, extra);
       await fsp.mkdir(destDir, { recursive: true });
-      const dest = await uniquePath(path.join(destDir, path.basename(filePath)));
-      await withRetry(() => fsp.rename(filePath, dest));
+      const dest = await moveMediaWithBackup(filePath, path.join(destDir, path.basename(filePath)));
       const recentFolders = await rememberFolder(folderPath, extra);
       return { ok: true, newPath: dest, newStatus: `custom:${extra}`, recentFolders };
     }
     if (action === 'rename') {
       if (!extra) return { ok: false, error: 'nome vazio' };
       const ext = path.extname(filePath);
-      const dest = await uniquePath(path.join(path.dirname(filePath), `${extra}${ext}`));
-      await withRetry(() => fsp.rename(filePath, dest));
+      const dest = await moveMediaWithBackup(filePath, path.join(path.dirname(filePath), `${extra}${ext}`));
       return { ok: true, newPath: dest, newStatus: null };
     }
     return { ok: false, error: `ação desconhecida: ${action}` };
@@ -829,6 +869,33 @@ ipcMain.handle('preview:full', async (_e, item) => {
     return await getFullPreview(item);
   } catch {
     return null;
+  }
+});
+
+ipcMain.handle('session:trashRejected', async (_e, { folderPath }) => {
+  try {
+    const root = await fsp.realpath(folderPath);
+    const rejectedDir = path.join(root, REJECTED_DIR);
+    if (!fs.existsSync(rejectedDir)) return { ok: true, deleted: [], errors: [] };
+    const realRejected = await fsp.realpath(rejectedDir);
+    if (path.resolve(realRejected) !== path.resolve(rejectedDir)) throw new Error('A pasta Desaprovadas aponta para outro local');
+    const files = await listMediaFiles(rejectedDir);
+    const deleted = [];
+    const errors = [];
+    for (const file of files) {
+      try {
+        await trashFile(file.path);
+        const backup = file.path + ORIGINAL_BACKUP_SUFFIX;
+        if (fs.existsSync(backup)) await trashFile(backup);
+        await appendDiscarded(folderPath, file.name);
+        deleted.push(file.name);
+      } catch (err) {
+        errors.push({ name: file.name, error: err && err.message ? err.message : String(err) });
+      }
+    }
+    return { ok: errors.length === 0, deleted, errors };
+  } catch (err) {
+    return { ok: false, deleted: [], errors: [{ name: '', error: err && err.message ? err.message : String(err) }] };
   }
 });
 

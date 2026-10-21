@@ -198,6 +198,7 @@ kbd {
 .dot.pending { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .dot.maybe { background: var(--maybe); }
 .dot.approved { background: var(--ok); }
+.dot.rejected { background: var(--bad); }
 .dot.discarded { background: var(--bad); }
 .dot.exported { background: var(--exported); }
 
@@ -226,6 +227,8 @@ kbd {
 .size-slider input { width: 100px; accent-color: var(--accent); }
 .sort-mode { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); }
 .sort-mode:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bulk-delete { color: var(--bad); border-color: rgba(255, 95, 95, .35); background: var(--bad-soft); }
+.bulk-delete:hover { background: rgba(255, 95, 95, .2); }
 
 #grid {
   flex: 1; overflow-y: auto; display: grid; align-content: start;
@@ -271,6 +274,7 @@ kbd {
 .tile .status .ic { width: 13px; height: 13px; stroke-width: 2.6; }
 .tile .status.approved { background: var(--ok); }
 .tile .status.maybe { background: var(--maybe); }
+.tile .status.rejected { background: var(--bad); }
 .tile .status.discarded { background: var(--bad); }
 .tile .status.exported { background: var(--exported); }
 .tile .status.custom { background: var(--custom); }
@@ -306,6 +310,7 @@ kbd {
 .status-pill { font-size: 11px; font-weight: 650; padding: 4px 9px; border-radius: 999px; }
 .status-pill.approved { background: var(--ok-soft); color: var(--ok); }
 .status-pill.maybe { background: var(--maybe-soft); color: var(--maybe); }
+.status-pill.rejected { background: var(--bad-soft); color: var(--bad); }
 .status-pill.exported { background: var(--exported-soft); color: var(--exported); }
 .status-pill.pending { background: var(--surface-2); color: var(--muted); }
 

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('sessionapi', {
   load: (folderPath) => ipcRenderer.invoke('session:load', folderPath),
   decide: (payload) => ipcRenderer.invoke('session:decide', payload),
   rotate: (payload) => ipcRenderer.invoke('session:rotate', payload),
+  trashRejected: (payload) => ipcRenderer.invoke('session:trashRejected', payload),
   settings: () => ipcRenderer.invoke('settings:get'),
   showItem: (filePath) => ipcRenderer.invoke('shell:showItem', filePath),
 });

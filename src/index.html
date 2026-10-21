@@ -85,10 +85,12 @@
           <button class="filter" data-filter="pendentes"><span class="dot pending"></span>Pendentes<span class="count"></span></button>
           <button class="filter" data-filter="talvez"><span class="dot maybe"></span>Talvez<span class="count"></span></button>
           <button class="filter" data-filter="aprovados"><span class="dot approved"></span>Aprovados<span class="count"></span></button>
-          <button class="filter" data-filter="descarte"><span class="dot discarded"></span>Descarte<span class="count"></span></button>
+          <button class="filter" data-filter="desaprovadas"><span class="dot rejected"></span>Desaprovadas<span class="count"></span></button>
+          <button class="filter" data-filter="descarte"><span class="dot discarded"></span>Na lixeira<span class="count"></span></button>
           <div class="filter-sep"></div>
           <button class="filter" data-filter="exportados"><span class="dot exported"></span>Frames e cortes<span class="count"></span></button>
         </nav>
+        <button id="btn-trash-rejected" class="btn sm bulk-delete" hidden><i data-icon="trash"></i>Excluir desaprovadas</button>
 
         <div class="sidebar-foot">
           <button id="btn-help-2" class="hint-link"><i data-icon="keyboard"></i>Atalhos do teclado <kbd>?</kbd></button>
@@ -211,7 +213,7 @@
       </div>
 
       <div id="v-decide">
-        <button data-action="discard" class="decide danger"><i data-icon="trash"></i>Excluir<kbd>Del</kbd></button>
+        <button id="v-reject" data-action="reject" class="decide danger"><i data-icon="close"></i>Desaprovar<kbd>Del</kbd></button>
         <button data-action="maybe" class="decide"><i data-icon="question"></i>Talvez<kbd>T</kbd></button>
         <button data-action="approve" class="decide ok"><i data-icon="check"></i>Aprovar<kbd>A</kbd></button>
         <span class="decide-sep"></span>
@@ -271,7 +273,8 @@
             <dl>
               <dt><kbd>A</kbd></dt><dd>Aprovar</dd>
               <dt><kbd>T</kbd></dt><dd>Talvez</dd>
-              <dt><kbd>Del</kbd></dt><dd>Excluir (vai pra lixeira)</dd>
+              <dt><kbd>Del</kbd></dt><dd>Desaprovar (não exclui)</dd>
+              <dt><kbd>U</kbd></dt><dd>Voltar para pendentes</dd>
               <dt><kbd>P</kbd></dt><dd>Mover pra pasta</dd>
               <dt><kbd>R</kbd></dt><dd>Renomear</dd>
               <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Anterior / próximo</dd>

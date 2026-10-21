@@ -1,8 +1,9 @@
 // Regressão: muitas fotos não podem virar faixas finas na grade.
-const { app, BrowserWindow, nativeImage } = require('electron');
+const { app, BrowserWindow, nativeImage, screen } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+process.env.DECUPAGEM_SMOKE = '1';
 require('../main.js');
 
 async function run() {
@@ -11,6 +12,10 @@ async function run() {
   const photo = nativeImage.createFromBitmap(pixels, { width: 64, height: 64 }).toJPEG(85);
   for (let i = 0; i < 100; i++) fs.writeFileSync(path.join(folder, `foto-${String(i).padStart(3, '0')}.jpg`), photo);
   const win = BrowserWindow.getAllWindows()[0] || await new Promise((resolve) => app.once('browser-window-created', (_e, created) => resolve(created)));
+  if (win.isVisible()) throw new Error('Teste abriu uma janela visível');
+  const left = screen.getAllDisplays().sort((a, b) => a.bounds.x - b.bounds.x)[0].workArea;
+  const bounds = win.getBounds();
+  if (bounds.x < left.x || bounds.x + bounds.width > left.x + left.width) throw new Error('Janela posicionada fora do monitor esquerdo');
   win.setSize(1036, 700);
   if (win.webContents.isLoading()) await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   try {
