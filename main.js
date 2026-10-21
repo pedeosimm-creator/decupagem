@@ -24,6 +24,7 @@ const RAW_EXTS = new Set(['.arw', '.srf', '.sr2', '.cr2', '.cr3', '.crw', '.nef'
 const WEB_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.gif', '.bmp', '.avif', '.ico']);
 const CONVERT_IMAGE_EXTS = new Set(['.tif', '.tiff', '.heic', '.heif']);
 const IMAGE_EXTS = new Set([...WEB_IMAGE_EXTS, ...CONVERT_IMAGE_EXTS]);
+const ROTATABLE_EXTS = new Set(['.jpg', '.jpeg', '.jfif', '.tif', '.tiff', '.heic', '.heif', ...RAW_EXTS]);
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.mts', '.m2ts', '.mxf', '.wmv', '.mpg', '.mpeg', '.3gp', '.flv', '.ogv']);
 const MEDIA_EXTS = new Set([...RAW_EXTS, ...IMAGE_EXTS, ...VIDEO_EXTS]);
 
@@ -583,7 +584,7 @@ async function getThumbnail(item) {
 }
 
 async function getFullPreview(item) {
-  if (item.kind === 'image' && WEB_IMAGE_EXTS.has(item.ext)) return pathToFileURL(item.path).href;
+  if (item.kind === 'image' && WEB_IMAGE_EXTS.has(item.ext)) return `${pathToFileURL(item.path).href}?v=${Math.round(item.mtimeMs || 0)}`;
   if (item.kind !== 'raw' && item.kind !== 'image') return null;
 
   const key = cacheKeyFor(item);
@@ -828,6 +829,38 @@ ipcMain.handle('preview:full', async (_e, item) => {
     return await getFullPreview(item);
   } catch {
     return null;
+  }
+});
+
+const ROTATE_RIGHT = { 1: 6, 2: 7, 3: 8, 4: 5, 5: 2, 6: 3, 7: 4, 8: 1 };
+const ROTATE_LEFT = { 1: 8, 2: 5, 3: 6, 4: 7, 5: 4, 6: 1, 7: 2, 8: 3 };
+
+ipcMain.handle('session:rotate', async (_e, { folderPath, filePath, direction }) => {
+  try {
+    if (direction !== 'left' && direction !== 'right') throw new Error('Direção de giro inválida');
+    const relative = path.relative(path.resolve(folderPath), path.resolve(filePath));
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Foto fora da pasta aberta');
+    if (!ROTATABLE_EXTS.has(path.extname(filePath).toLowerCase())) throw new Error('Este formato não aceita giro seguro no arquivo original');
+    const before = await fsp.stat(filePath);
+    if (!before.isFile()) throw new Error('O arquivo não é uma foto');
+    const tags = await exiftool.read(filePath);
+    const current = Number(tags.Orientation) || 1;
+    const next = (direction === 'right' ? ROTATE_RIGHT : ROTATE_LEFT)[current];
+    if (!next) throw new Error('Orientação EXIF inválida');
+    const backupPath = `${filePath}.decupagem-original`;
+    try {
+      await withRetry(() => fsp.copyFile(filePath, backupPath, fs.constants.COPYFILE_EXCL));
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+    await sleep(250);
+    await withRetry(() => exiftool.write(filePath, { 'Orientation#': next }, ['-overwrite_original']), 8, 250);
+    const saved = Number((await exiftool.read(filePath)).Orientation) || 1;
+    if (saved !== next) throw new Error('O arquivo não confirmou o giro; o backup foi preservado');
+    const after = await fsp.stat(filePath);
+    return { ok: true, orientation: next, backupPath, size: after.size, mtimeMs: after.mtimeMs };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
   }
 });
 

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('sessionapi', {
   pathForFile: (file) => webUtils.getPathForFile(file),
   load: (folderPath) => ipcRenderer.invoke('session:load', folderPath),
   decide: (payload) => ipcRenderer.invoke('session:decide', payload),
+  rotate: (payload) => ipcRenderer.invoke('session:rotate', payload),
   settings: () => ipcRenderer.invoke('settings:get'),
   showItem: (filePath) => ipcRenderer.invoke('shell:showItem', filePath),
 });

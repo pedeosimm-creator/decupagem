@@ -230,6 +230,7 @@ kbd {
 #grid {
   flex: 1; overflow-y: auto; display: grid; align-content: start;
   grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
+  grid-auto-rows: max-content;
   gap: 14px; padding: 18px;
 }
 .tile {

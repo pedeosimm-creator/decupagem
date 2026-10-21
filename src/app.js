@@ -51,7 +51,7 @@
     progressPct: $('progress-pct'), progressFill: $('progress-fill'), progressText: $('progress-text'),
     recentJobs: $('recent-jobs'), recentList: $('recent-list'), dropzone: $('dropzone'), dropOverlay: $('drop-overlay'),
     stage: $('v-stage'), image: $('v-image'), video: $('v-video'), vName: $('v-name'), vMeta: $('v-meta'),
-    vCounter: $('v-counter'), vStatus: $('v-status'), vAlternate: $('v-alternate'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
+    vCounter: $('v-counter'), vStatus: $('v-status'), vAlternate: $('v-alternate'), vRotateLeft: $('v-rotate-left'), vRotateRight: $('v-rotate-right'), vPrev: $('v-prev'), vNext: $('v-next'), zoomHint: $('v-zoom-hint'),
     loading: $('v-loading'), loadingTitle: $('v-loading-title'), loadingDetail: $('v-loading-detail'), loadingFill: $('v-loading-fill'),
     flash: $('v-flash'), videoUi: $('v-video-ui'), timeline: $('timeline'), tlPlayed: $('tl-played'), tlBuffer: $('tl-buffer'),
     tlRange: $('tl-range'), tlIn: $('tl-in'), tlOut: $('tl-out'), tlHead: $('tl-head'), tlHover: $('tl-hover'),
@@ -572,6 +572,9 @@
     el.vPrev.disabled = state.vIndex === 0;
     el.vNext.disabled = state.vIndex >= state.vItems.length - 1;
     el.vAlternate.hidden = item.kind === 'video';
+    const canRotate = item.kind !== 'video' && /\.(jpe?g|jfif|tiff?|heic|heif|arw|srf|sr2|cr2|cr3|crw|nef|nrw|dng|raf|orf|rw2|pef|srw|3fr|iiq|rwl|x3f|erf|kdc|mrw|mos)$/i.test(item.ext);
+    el.vRotateLeft.hidden = !canRotate;
+    el.vRotateRight.hidden = !canRotate;
 
     el.video.pause();
     el.video.hidden = true;
@@ -623,6 +626,37 @@
     state.previewCache.set(item.path, url);
     el.image.src = url;
   });
+
+  async function rotateCurrent(direction) {
+    const item = state.vItems[state.vIndex];
+    if (!item || el.vRotateRight.disabled) return;
+    el.vRotateLeft.disabled = true;
+    el.vRotateRight.disabled = true;
+    releaseMedia();
+    showLoading('Salvando orientação…');
+    let result;
+    try {
+      result = await sessionapi.rotate({ folderPath: state.folderPath, filePath: item.path, direction });
+    } catch (err) {
+      result = { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+    hideLoading();
+    el.vRotateLeft.disabled = false;
+    el.vRotateRight.disabled = false;
+    if (!result.ok) {
+      errorToast('Não consegui girar a foto', result.error);
+      showCurrent();
+      return;
+    }
+    item.size = result.size;
+    item.mtimeMs = result.mtimeMs;
+    state.previewCache.delete(item.path);
+    toast({ kind: 'ok', title: 'Foto girada e salva no original', detail: 'Cópia de segurança: ' + result.backupPath });
+    showCurrent();
+  }
+
+  el.vRotateLeft.addEventListener('click', () => rotateCurrent('left'));
+  el.vRotateRight.addEventListener('click', () => rotateCurrent('right'));
 
   async function showVideo(item) {
     el.video.hidden = false;

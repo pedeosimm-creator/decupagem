@@ -2,6 +2,8 @@
 
 App Windows para revisar, organizar e descartar fotos e vídeos. Suporta RAW, formatos comuns e prévias de vídeo.
 
+Na grade, os cartões mantêm a altura correta mesmo com muitas fotos. No visualizador, **Esquerda** e **Direita** giram fotos JPEG, TIFF, HEIC e RAW em passos de 90°: a orientação EXIF é gravada no próprio arquivo, e a primeira alteração cria ao lado uma cópia `.decupagem-original` intacta. PNG, WebP, GIF, BMP, AVIF e ICO não exibem esses botões porque esse método de giro não é confiável nesses formatos. O giro não recodifica os pixels da foto.
+
 ## Hub Pedro
 
 O Hub identifica o app como `decupagem`, instala em `%LOCALAPPDATA%\Programs\Decupagem` e procura a última release do repositório configurado no `apps.json`. O ativo deve se chamar **`decupagem.zip`** e conter, na raiz, `decupagem.exe`, `versao.txt` e as dependências do Electron em `resources/app`.
