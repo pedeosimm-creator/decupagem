@@ -88,6 +88,19 @@
     return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
   }
 
+  // data de captura (EXIF) quando já foi lida; senão a do arquivo
+  function itemDateMs(item) {
+    return item.takenMs || item.mtimeMs || 0;
+  }
+
+  function itemDateTitle(item) {
+    return item.takenMs ? 'Data e hora em que a foto/vídeo foi feita (EXIF)' : 'Data de modificação do arquivo (a data da câmera ainda está sendo lida)';
+  }
+
+  function formatShortDate(ms) {
+    return ms ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(ms)) : '';
+  }
+
   function formatDateTime(ms) {
     return ms ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(ms)) : '—';
   }
@@ -240,6 +253,44 @@
     } else {
       renderGrid();
     }
+    loadCaptureDates(state.folderPath);
+  }
+
+  // Lê a data de captura em segundo plano, em lotes, e atualiza as linhas já
+  // desenhadas; ordenação por data se ajusta quando a leitura termina.
+  async function loadCaptureDates(folder) {
+    const pending = state.items.filter((it) => it.path && !it.takenMs && it.status !== 'discarded');
+    for (let i = 0; i < pending.length; i += 40) {
+      if (state.folderPath !== folder) return;
+      const batch = pending.slice(i, i + 40).map(({ id, path, size, mtimeMs }) => ({ id, path, size, mtimeMs }));
+      let results;
+      try { results = await mediaapi.captureDates(batch); } catch { return; }
+      if (state.folderPath !== folder) return;
+      for (const { id, takenMs } of results) {
+        if (!takenMs) continue;
+        const item = state.items.find((it) => it.id === id);
+        if (!item) continue;
+        item.takenMs = takenMs;
+        const tile = tileById.get(id);
+        if (tile) fillTileDate(tile, item);
+      }
+    }
+    if (state.folderPath === folder && state.sort !== 'name' && el.viewer.hidden) {
+      const scroll = el.grid.scrollTop;
+      renderGrid();
+      el.grid.scrollTop = scroll;
+    }
+  }
+
+  function fillTileDate(tile, item) {
+    const when = tile.querySelector('.when');
+    if (when) {
+      when.textContent = formatDateTime(itemDateMs(item));
+      when.title = itemDateTitle(item);
+      when.classList.toggle('approx', !item.takenMs);
+    }
+    const short = tile.querySelector('.cap .d');
+    if (short) short.textContent = formatShortDate(itemDateMs(item));
   }
 
   async function renderRecent() {
@@ -307,7 +358,7 @@
   function visibleItems() {
     const q = state.query.trim().toLowerCase();
     const items = state.items.filter((it) => statusMatches(it.status, state.filter) && kindMatches(it) && (!q || it.name.toLowerCase().includes(q)));
-    if (state.sort !== 'name') items.sort((a, b) => (state.sort === 'date-desc' ? b.mtimeMs - a.mtimeMs : a.mtimeMs - b.mtimeMs) || collator.compare(a.name, b.name));
+    if (state.sort !== 'name') items.sort((a, b) => (state.sort === 'date-desc' ? itemDateMs(b) - itemDateMs(a) : itemDateMs(a) - itemDateMs(b)) || collator.compare(a.name, b.name));
     return items;
   }
 
@@ -403,9 +454,31 @@
     catch (err) { result = { ok: false, deleted: [], errors: [{ error: String(err && err.message ? err.message : err) }] }; }
     el.trashRejected.disabled = false;
     await loadFolder(folder);
-    if (result.ok) toast({ kind: 'ok', title: `${result.deleted.length} arquivo${result.deleted.length === 1 ? '' : 's'} enviado${result.deleted.length === 1 ? '' : 's'} à Lixeira` });
-    else errorToast('Alguns arquivos não foram excluídos', (result.errors || []).slice(0, 3).map((e) => `${e.name}: ${e.error}`).join(' · '));
+    if (result.ok) {
+      toast({ kind: 'ok', title: `${result.deleted.length} arquivo${result.deleted.length === 1 ? '' : 's'} enviado${result.deleted.length === 1 ? '' : 's'} à Lixeira` });
+      return;
+    }
+    const failed = (result.errors || []).filter((e) => e.name).map((e) => e.name);
+    const plural = failed.length === 1 ? '' : 's';
+    toast({
+      kind: 'err',
+      title: `${failed.length || 'Alguns'} arquivo${plural} não foi${failed.length === 1 ? '' : 'ram'} pra Lixeira`,
+      detail: (result.errors || []).slice(0, 2).map((e) => (e.name ? `${e.name}: ${e.error}` : e.error)).join(' · '),
+      timeout: 0,
+      actions: failed.length ? [{ label: `Excluir de vez (${failed.length})`, fn: () => deleteRejectedForGood(folder, failed) }] : [],
+    });
   });
+
+  async function deleteRejectedForGood(folder, names) {
+    const n = names.length;
+    if (!window.confirm(`Excluir ${n} arquivo${n === 1 ? '' : 's'} de vez, sem passar pela Lixeira?\n\nIsso não pode ser desfeito.`)) return;
+    let result;
+    try { result = await sessionapi.deleteRejected({ folderPath: folder, names }); }
+    catch (err) { result = { ok: false, deleted: [], errors: [{ name: '', error: String(err && err.message ? err.message : err) }] }; }
+    await loadFolder(folder);
+    if (result.deleted.length) toast({ kind: 'ok', title: `${result.deleted.length} arquivo${result.deleted.length === 1 ? '' : 's'} excluído${result.deleted.length === 1 ? '' : 's'} de vez` });
+    if (!result.ok) errorToast('Alguns arquivos continuam lá', result.errors.slice(0, 2).map((e) => (e.name ? `${e.name}: ${e.error}` : e.error)).join(' · '));
+  }
 
   // ---- grade ----
 
@@ -414,6 +487,7 @@
   let thumbObserver = null;
   const thumbQueue = [];
   let thumbActive = 0;
+  const tileById = new Map();
 
   function renderGrid() {
     updateCounts();
@@ -431,9 +505,16 @@
     }, { root: el.grid, rootMargin: '400px 0px' });
 
     el.grid.innerHTML = '';
+    tileById.clear();
     el.gridEmpty.hidden = list.length > 0;
     el.resultCount.textContent = `${list.length} ${list.length === 1 ? 'arquivo' : 'arquivos'}`;
     const frag = document.createDocumentFragment();
+    if (state.view === 'list' && list.length) {
+      const head = document.createElement('div');
+      head.className = 'list-head';
+      head.innerHTML = '<span></span><span>Nome</span><span>Data e hora</span><span>Tipo · tamanho</span><span>Pasta</span>';
+      frag.appendChild(head);
+    }
 
     list.forEach((item, i) => {
       const tile = document.createElement('div');
@@ -451,8 +532,10 @@
           ${item.kind === 'raw' ? `<span class="tag">RAW · ${escapeHtml(extLabel)}</span>` : ''}
           ${STATUS_ICON[statusKey] || statusKey === 'custom' ? `<span class="status ${statusKey}">${icon(STATUS_ICON[statusKey] || 'folder')}</span>` : ''}
         </div>
-        <div class="cap"><span class="n" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><span class="m">${escapeHtml(meta)}</span></div>
-        <div class="list-detail"><span title="Data e hora de modificação do arquivo">${formatDateTime(item.mtimeMs)}</span><span>${escapeHtml(meta)}</span><span title="Pasta relativa ao job">${escapeHtml(location)}</span></div>`;
+        <div class="cap"><span class="n" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><span class="m"><span>${escapeHtml(meta)}</span><span class="d"></span></span></div>
+        <div class="list-detail"><span class="when"></span><span>${escapeHtml(meta)}</span><span title="Pasta relativa ao job">${escapeHtml(location)}</span></div>`;
+      tileById.set(item.id, tile);
+      if (item.status !== 'discarded') fillTileDate(tile, item);
       if (item.status !== 'discarded') {
         tile.addEventListener('click', () => openViewer(list, list.indexOf(item)));
         thumbObserver.observe(tile);
@@ -570,7 +653,7 @@
     if (info && info.codec) chips.push(`<span class="chip">${escapeHtml(info.codec.toUpperCase())}</span>`);
     if (info && info.duration) chips.push(`<span class="chip">${formatDuration(info.duration)}</span>`);
     if (item.size) chips.push(`<span class="chip">${formatSize(item.size)}</span>`);
-    if (item.mtimeMs) chips.push(`<span class="chip" title="Data e hora de modificação do arquivo">${formatDateTime(item.mtimeMs)}</span>`);
+    if (itemDateMs(item)) chips.push(`<span class="chip" title="${itemDateTitle(item)}">${formatDateTime(itemDateMs(item))}</span>`);
     if (state.usingProxy) chips.push('<span class="chip hl" title="O formato não toca direto; você assiste uma cópia leve, mas frame e corte usam o original">prévia convertida</span>');
     el.vMeta.innerHTML = chips.join('');
   }
@@ -1296,6 +1379,8 @@
       case 'r': handleAction('rename'); return;
       case 'p': handleAction('folder'); return;
       case 'z': if (!isVideo) setZoom(!el.stage.classList.contains('zoomed')); return;
+      case '[': if (!el.vRotateLeft.hidden) rotateCurrent('left'); return;
+      case ']': if (!el.vRotateRight.hidden) rotateCurrent('right'); return;
       default: break;
     }
     if (!isVideo) return;

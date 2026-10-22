@@ -484,3 +484,29 @@ kbd {
   .transport { justify-content: center; }
   .search { width: 200px; }
 }
+
+/* ---- lista com detalhes: colunas planas pra o cabeçalho alinhar ---- */
+#grid.list-view { gap: 4px; }
+#grid.list-view .tile,
+#grid .list-head {
+  display: grid;
+  grid-template-columns: 72px minmax(180px, 1.6fr) 170px 150px minmax(120px, 1fr);
+  align-items: center; column-gap: 14px;
+}
+#grid.list-view .tile { min-height: 62px; padding-right: 14px; }
+#grid.list-view .tile:hover { transform: none; box-shadow: none; background: var(--surface-2); }
+#grid.list-view .tile .list-detail { display: contents; }
+#grid.list-view .tile .list-detail span { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#grid.list-view .tile .list-detail .when { color: var(--text); }
+#grid.list-view .tile .list-detail .when.approx { color: var(--muted); font-style: italic; }
+#grid.list-view .tile .cap { padding: 8px 0; }
+#grid.list-view .tile .cap .m { display: none; }
+#grid.list-view .tile .cap .n { font-size: 13px; }
+#grid .list-head {
+  position: sticky; top: 0; z-index: 2; padding: 8px 14px 8px 0; margin: -18px 0 2px;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+  font-size: 10.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
+}
+.tile .cap .m { display: flex; gap: 8px; justify-content: space-between; }
+.tile .cap .m > span { overflow: hidden; text-overflow: ellipsis; }
+.tile .cap .m .d { flex: none; font-variant-numeric: tabular-nums; }

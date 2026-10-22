@@ -7,9 +7,11 @@ const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { exiftool } = require('exiftool-vendored');
 
-// Alguns drivers mostram faixas nas imagens decodificadas pelo Chromium/GPU.
-// O app de revisão prioriza uma prévia estável; vídeo continua funcional em CPU.
-app.disableHardwareAcceleration();
+// A aceleração por hardware fica ligada: sem ela o Chromium não decodifica
+// HEVC (Sony XAVC HS, iPhone) e todo vídeo desses cairia na conversão lenta.
+// As "faixas" da grade eram CSS (cartões espremidos), não o driver de vídeo.
+// DECUPAGEM_SEM_GPU=1 desliga, se algum PC precisar.
+if (process.env.DECUPAGEM_SEM_GPU === '1') app.disableHardwareAcceleration();
 
 let trashFn;
 async function trash(paths) {
@@ -173,7 +175,28 @@ async function trashFile(filePath) {
       catch { throw nativeError; }
     }
     if (fs.existsSync(filePath)) throw new Error('O arquivo continua na pasta após enviar à lixeira');
-  }, 8, 250);
+  }, 8, 250).catch(async (err) => {
+    throw new Error(await explainTrashFailure(filePath, err));
+  });
+}
+
+// Mensagem que diz o motivo provável em vez do erro cru do Windows.
+async function explainTrashFailure(filePath, err) {
+  if (!fs.existsSync(filePath)) return err && err.message ? err.message : String(err);
+  try {
+    const handle = await fsp.open(filePath, 'r+');
+    await handle.close();
+  } catch (openErr) {
+    if (openErr.code === 'EBUSY') return 'o arquivo está aberto em outro programa';
+  }
+  return 'o Windows não aceitou mandar pra Lixeira (comum em cartão de memória, pendrive ou pasta de rede, que não têm Lixeira)';
+}
+
+// Exclusão definitiva: só para o que está em Desaprovadas e o Windows não
+// deixou ir pra Lixeira. Tira o "somente leitura" (foto protegida na câmera).
+async function deleteForGood(filePath) {
+  try { await fsp.chmod(filePath, 0o666); } catch { /* sem atributo pra tirar */ }
+  await withRetry(() => fsp.unlink(filePath), 8, 250);
 }
 
 function fileEntry(full, name, st) {
@@ -546,6 +569,45 @@ function urlIfExists(file) {
   return fs.existsSync(file) && fs.statSync(file).size > 0 ? pathToFileURL(file).href : null;
 }
 
+// ---- data e hora de captura ----
+
+// A data de modificação do arquivo muda ao copiar do cartão ou ao girar a
+// foto; a data de captura vem do EXIF (foto) ou do cabeçalho QuickTime (vídeo).
+const CAPTURE_DATE_TAGS = ['SubSecDateTimeOriginal', 'DateTimeOriginal', 'CreateDate', 'MediaCreateDate', 'CreationDate', 'DateCreated'];
+const captureDateCache = new Map();
+const dateQueue = limiter(4);
+
+function exifDateToMs(value) {
+  if (!value || typeof value !== 'object' || !value.year) return null;
+  // com fuso conhecido (vídeo QuickTime vem em UTC) usa o instante real;
+  // sem fuso, a hora da câmera é a hora local de quem fotografou
+  if (value.zone && typeof value.toMillis === 'function') {
+    const ms = value.toMillis();
+    if (Number.isFinite(ms)) return ms;
+  }
+  const ms = new Date(value.year, value.month - 1, value.day, value.hour || 0, value.minute || 0, value.second || 0).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+async function captureDate(item) {
+  const key = `${item.path}|${item.size}|${item.mtimeMs}`;
+  if (captureDateCache.has(key)) return captureDateCache.get(key);
+  let ms = null;
+  try {
+    const tags = await dateQueue(() => exiftool.read(item.path, ['-fast2']));
+    for (const tag of CAPTURE_DATE_TAGS) {
+      ms = exifDateToMs(tags[tag]);
+      // 1904/1970 = data zerada que algumas câmeras gravam sem relógio ajustado
+      if (ms && new Date(ms).getFullYear() > 1980) break;
+      ms = null;
+    }
+  } catch {
+    ms = null;
+  }
+  captureDateCache.set(key, ms);
+  return ms;
+}
+
 // JPEG embutido no RAW vem sem a tag de orientação: copia a do RAW pra a
 // prévia não aparecer deitada quando a foto foi feita na vertical.
 async function copyOrientation(srcPath, destJpg) {
@@ -899,6 +961,33 @@ ipcMain.handle('session:trashRejected', async (_e, { folderPath }) => {
   }
 });
 
+ipcMain.handle('session:deleteRejected', async (_e, { folderPath, names }) => {
+  const deleted = [];
+  const errors = [];
+  try {
+    const root = await fsp.realpath(folderPath);
+    const rejectedDir = path.join(root, REJECTED_DIR);
+    if (path.resolve(await fsp.realpath(rejectedDir)) !== path.resolve(rejectedDir)) throw new Error('A pasta Desaprovadas aponta para outro local');
+    for (const name of Array.isArray(names) ? names : []) {
+      // só nome de arquivo, sempre dentro de Desaprovadas
+      const file = path.join(rejectedDir, path.basename(String(name)));
+      try {
+        if (!fs.existsSync(file) || !(await fsp.stat(file)).isFile()) throw new Error('arquivo não encontrado em Desaprovadas');
+        await deleteForGood(file);
+        const backup = file + ORIGINAL_BACKUP_SUFFIX;
+        if (fs.existsSync(backup)) await deleteForGood(backup);
+        await appendDiscarded(folderPath, path.basename(file));
+        deleted.push(path.basename(file));
+      } catch (err) {
+        errors.push({ name: path.basename(file), error: err.code === 'EBUSY' ? 'o arquivo está aberto em outro programa' : (err.message || String(err)) });
+      }
+    }
+  } catch (err) {
+    errors.push({ name: '', error: err && err.message ? err.message : String(err) });
+  }
+  return { ok: errors.length === 0, deleted, errors };
+});
+
 const ROTATE_RIGHT = { 1: 6, 2: 7, 3: 8, 4: 5, 5: 2, 6: 3, 7: 4, 8: 1 };
 const ROTATE_LEFT = { 1: 8, 2: 5, 3: 6, 4: 7, 5: 4, 6: 1, 7: 2, 8: 3 };
 
@@ -937,6 +1026,12 @@ ipcMain.handle('preview:alternate', async (_e, item) => {
 });
 
 // ---- IPC: vídeo (probe, proxy, frame, corte) ----
+
+ipcMain.handle('media:captureDates', async (_e, items) => {
+  const list = Array.isArray(items) ? items.filter((it) => it && it.path) : [];
+  const dates = await Promise.all(list.map((it) => captureDate(it)));
+  return list.map((it, i) => ({ id: it.id, takenMs: dates[i] }));
+});
 
 ipcMain.handle('media:probe', async (_e, filePath) => {
   try {

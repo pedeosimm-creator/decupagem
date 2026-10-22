@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('sessionapi', {
   decide: (payload) => ipcRenderer.invoke('session:decide', payload),
   rotate: (payload) => ipcRenderer.invoke('session:rotate', payload),
   trashRejected: (payload) => ipcRenderer.invoke('session:trashRejected', payload),
+  deleteRejected: (payload) => ipcRenderer.invoke('session:deleteRejected', payload),
   settings: () => ipcRenderer.invoke('settings:get'),
   showItem: (filePath) => ipcRenderer.invoke('shell:showItem', filePath),
 });
@@ -22,6 +23,7 @@ contextBridge.exposeInMainWorld('previewapi', {
 
 contextBridge.exposeInMainWorld('mediaapi', {
   probe: (filePath) => ipcRenderer.invoke('media:probe', filePath),
+  captureDates: (items) => ipcRenderer.invoke('media:captureDates', items),
   proxy: (item, jobId) => ipcRenderer.invoke('media:proxy', { item, jobId }),
   saveFrame: (payload) => ipcRenderer.invoke('media:saveFrame', payload),
   saveClip: (payload) => ipcRenderer.invoke('media:saveClip', payload),
